@@ -44,7 +44,7 @@ async function callClaude(prompt, systemPrompt) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -87,7 +87,7 @@ Return JSON with this exact shape:
 
   const raw = await callClaude(prompt, systemPrompt)
   try {
-    return JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const c=raw.replace(/```json|```/g,"").trim();const s=c.indexOf("{");const e=c.lastIndexOf("}");if(s<0||e<0)return null;return JSON.parse(c.slice(s,e+1))
   } catch {
     return null
   }
@@ -139,7 +139,7 @@ Return JSON with this exact shape:
 
   const raw = await callClaude(prompt, systemPrompt)
   try {
-    return JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const c=raw.replace(/```json|```/g,"").trim();const s=c.indexOf("{");const e=c.lastIndexOf("}");if(s<0||e<0)return null;return JSON.parse(c.slice(s,e+1))
   } catch {
     return null
   }
