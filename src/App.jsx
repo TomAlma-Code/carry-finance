@@ -6,6 +6,25 @@ import CaseView from './CaseView'
 import { loadProgress, saveProgress, saveDecision, loadTodayContent, saveTodayContent } from './supabase'
 import { generateArticle, generateCase, pickConcept } from './api'
 
+const TODAY = new Date().toISOString().split('T')[0]
+const LS_CONTENT = `carry_content_${TODAY}`
+const LS_PROGRESS = `carry_progress_${TODAY}`
+
+function getCachedContent() {
+  try { return JSON.parse(localStorage.getItem(LS_CONTENT)) } catch { return null }
+}
+function setCachedContent(c) {
+  // Clear old day caches
+  Object.keys(localStorage).filter(k => k.startsWith('carry_content_') && k !== LS_CONTENT).forEach(k => localStorage.removeItem(k))
+  localStorage.setItem(LS_CONTENT, JSON.stringify(c))
+}
+function getCachedProgress() {
+  try { return JSON.parse(localStorage.getItem(LS_PROGRESS)) } catch { return null }
+}
+function setCachedProgress(p) {
+  localStorage.setItem(LS_PROGRESS, JSON.stringify(p))
+}
+
 export default function App() {
   const [screen, setScreen] = useState('loading')
   const [loadingMsg, setLoadingMsg] = useState('Loading carry...')
@@ -17,40 +36,65 @@ export default function App() {
 
   async function init() {
     try {
+      // 1. Try localStorage first — instant load on return visits
+      const cachedContent = getCachedContent()
+      const cachedProgress = getCachedProgress()
+
+      if (cachedContent && cachedProgress) {
+        // Instant render from cache
+        setTodayContent(cachedContent)
+        setProgress(cachedProgress)
+        setScreen('home')
+        // Sync progress from Supabase in background (no loading spinner)
+        loadProgress().then(prog => { if (prog) { setProgress(prog); setCachedProgress(prog) } })
+        return
+      }
+
+      // 2. No cache — full load
       setLoadingMsg('Loading your progress...')
       let prog = await loadProgress()
       if (!prog) {
         prog = await saveProgress({ xp: 0, concepts_seen: [], cases_done: [], article_read_today: false, case_done_today: false })
       }
-
-      const today = new Date().toISOString().split('T')[0]
-      if (prog && prog.last_active !== today) {
+      if (prog && prog.last_active !== TODAY) {
         prog = await saveProgress({ article_read_today: false, case_done_today: false })
       }
       setProgress(prog || { xp: 0, streak: 1, concepts_seen: [], cases_done: [] })
+      if (prog) setCachedProgress(prog)
 
-      setLoadingMsg('Generating today\'s briefing...')
+      // 3. Check Supabase for today's content
+      setLoadingMsg("Checking today's briefing...")
       let content = await loadTodayContent()
 
-      if (!content || !content.article_json || !content.case_json) {
-        const conceptsSeen = prog?.concepts_seen || []
-        const casesDone = prog?.cases_done || []
-        const concept = pickConcept(conceptsSeen)
-
-        setLoadingMsg(`Writing: ${concept.split(' ').slice(0,4).join(' ')}...`)
-        
-        const [article, caseData] = await Promise.all([
-          generateArticle(concept, conceptsSeen),
-          generateCase(conceptsSeen, casesDone)
-        ])
-
-        if (!article || !caseData) throw new Error('Content generation failed - check API key')
-
-        content = { article_json: article, case_json: caseData }
-        await saveTodayContent({ article_json: article, case_json: caseData })
+      if (content?.article_json && content?.case_json) {
+        // Found in Supabase — cache locally and show
+        const parsed = { article: content.article_json, case: content.case_json }
+        setCachedContent(parsed)
+        setTodayContent(parsed)
+        setScreen('home')
+        return
       }
 
-      setTodayContent({ article: content.article_json, case: content.case_json })
+      // 4. Nothing cached — generate fresh
+      const conceptsSeen = prog?.concepts_seen || []
+      const casesDone = prog?.cases_done || []
+      const concept = pickConcept(conceptsSeen)
+      setLoadingMsg(`Writing: ${concept.split(' ').slice(0, 4).join(' ')}...`)
+
+      const [article, caseData] = await Promise.all([
+        generateArticle(concept, conceptsSeen),
+        generateCase(conceptsSeen, casesDone)
+      ])
+
+      if (!article || !caseData) throw new Error('Content generation failed')
+
+      const parsed = { article, case: caseData }
+      setCachedContent(parsed)
+      setTodayContent(parsed)
+
+      // Save to Supabase (don't await — let it happen in background)
+      saveTodayContent({ article_json: article, case_json: caseData }).catch(console.error)
+
       setScreen('home')
     } catch (err) {
       console.error('Init error:', err)
@@ -65,6 +109,7 @@ export default function App() {
       concepts_seen: [...(progress?.concepts_seen || []), todayContent?.article?.concept].filter(Boolean),
     })
     setProgress(updated)
+    setCachedProgress(updated)
   }
 
   async function handleCaseDecide(decision, wasCorrect) {
@@ -75,6 +120,7 @@ export default function App() {
       cases_done: [...(progress?.cases_done || []), todayContent?.case?.id].filter(Boolean),
     })
     setProgress(updated)
+    setCachedProgress(updated)
     if (todayContent?.case?.id) await saveDecision(todayContent.case.id, decision, wasCorrect)
   }
 
