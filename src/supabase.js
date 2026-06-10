@@ -7,10 +7,13 @@ export const supabase = createClient(supabaseUrl, supabaseKey)
 
 // User ID — single user app, stored in localStorage
 export function getUserId() {
-  let id = localStorage.getItem('carry_user_id')
+  // Stable single-user ID. Persisted under a dedicated key that we never clear
+  // during cache invalidation, so the same person keeps the same progress row.
+  let id = localStorage.getItem('carry_uid_stable')
   if (!id) {
-    id = 'user_' + Math.random().toString(36).slice(2, 10)
-    localStorage.setItem('carry_user_id', id)
+    // Migrate from old key if present
+    id = localStorage.getItem('carry_user_id') || ('user_' + Math.random().toString(36).slice(2, 10))
+    localStorage.setItem('carry_uid_stable', id)
   }
   return id
 }

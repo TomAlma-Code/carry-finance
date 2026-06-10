@@ -45,8 +45,15 @@ export default function App() {
         setTodayContent(cachedContent)
         setProgress(cachedProgress)
         setScreen('home')
-        // Sync progress from Supabase in background (no loading spinner)
-        loadProgress().then(prog => { if (prog) { setProgress(prog); setCachedProgress(prog) } })
+        // Sync progress from Supabase in background, applying day-reset if needed
+        loadProgress().then(async prog => {
+          if (!prog) return
+          if (prog.last_active !== TODAY) {
+            prog = await saveProgress({ article_read_today: false, case_done_today: false })
+          }
+          setProgress(prog)
+          setCachedProgress(prog)
+        })
         return
       }
 
@@ -81,12 +88,18 @@ export default function App() {
       const concept = pickConcept(conceptsSeen)
       setLoadingMsg(`Writing: ${concept.split(' ').slice(0, 4).join(' ')}...`)
 
+      // Generate with one retry each — these calls occasionally return malformed JSON
+      async function withRetry(fn) {
+        let r = await fn()
+        if (!r) r = await fn()
+        return r
+      }
       const [article, caseData] = await Promise.all([
-        generateArticle(concept, conceptsSeen),
-        generateCase(conceptsSeen, casesDone)
+        withRetry(() => generateArticle(concept, conceptsSeen)),
+        withRetry(() => generateCase(conceptsSeen, casesDone))
       ])
 
-      if (!article || !caseData) throw new Error('Content generation failed')
+      if (!article || !caseData) throw new Error('Content generation failed — tap Try again')
 
       const parsed = { article, case: caseData }
       setCachedContent(parsed)
