@@ -72,30 +72,60 @@ export default function CaseView({ caseData, onDecide, userDecision, completed }
             </div>
           ) : (
             <div style={styles.revealSection}>
-              {/* Your choice */}
+              {/* Result banner */}
               <div style={{
                 ...styles.choiceResult,
                 borderColor: correct ? '#c5f135' : '#ff6b5e',
                 background: correct ? 'rgba(197,241,53,0.06)' : 'rgba(255,107,94,0.06)',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 18 }}>{correct ? '✓' : '✗'}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>{correct ? '\u2713' : '\u2717'}</span>
                   <span style={{
-                    fontFamily: 'DM Mono, monospace',
-                    fontSize: 12,
-                    color: correct ? '#c5f135' : '#ff6b5e',
-                    letterSpacing: 1,
+                    fontFamily: 'DM Mono, monospace', fontSize: 12,
+                    color: correct ? '#c5f135' : '#ff6b5e', letterSpacing: 1,
                   }}>
-                    {correct ? 'GOOD CALL' : 'DIFFERENT CALL'}
+                    {correct ? 'GOOD CALL' : 'NOT THE BEST CALL'}
                   </span>
                 </div>
-                <p style={{ fontSize: 14, color: '#7a7d6e', fontFamily: 'DM Mono, monospace' }}>
-                  You chose {chosen}: {optMap[chosen]?.label}
-                </p>
-                <p style={{ fontSize: 13, color: '#7a7d6e', marginTop: 4, fontFamily: 'DM Mono, monospace' }}>
-                  Best answer {caseData.actualChoice}: {optMap[caseData.actualChoice]?.label}
-                </p>
               </div>
+
+              {/* All options, color-coded */}
+              <div style={{ ...styles.options, marginBottom: 24 }}>
+                {opts.map(([key, opt]) => {
+                  const isCorrect = key === caseData.actualChoice
+                  const isChosen = key === chosen
+                  const bg = isCorrect ? 'rgba(197,241,53,0.08)'
+                    : (isChosen ? 'rgba(255,107,94,0.08)' : 'transparent')
+                  const border = isCorrect ? '#c5f135'
+                    : (isChosen ? '#ff6b5e' : '#252820')
+                  const keyColor = isCorrect ? '#c5f135'
+                    : (isChosen ? '#ff6b5e' : '#7a7d6e')
+                  return (
+                    <div key={key} style={{ ...styles.optionBtn, cursor: 'default', background: bg, borderColor: border }}>
+                      <span style={{ ...styles.optionKey, color: keyColor, borderColor: border }}>{key}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <div style={styles.optionLabel}>{opt.label}</div>
+                          {isCorrect && <span style={styles.bestTag}>BEST ANSWER</span>}
+                          {isChosen && !isCorrect && <span style={styles.yoursTag}>YOUR PICK</span>}
+                          {isChosen && isCorrect && <span style={styles.yoursTag}>YOUR PICK</span>}
+                        </div>
+                        <div style={styles.optionDesc}>{opt.description}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* The calculation */}
+              {caseData.calculation && (
+                <div style={styles.calcBox}>
+                  <div style={styles.calcLabel}>THE MATH</div>
+                  {caseData.calculation.split('\n').filter(Boolean).map((line, i) => (
+                    <p key={i} style={styles.calcLine}>{line}</p>
+                  ))}
+                </div>
+              )}
 
               {/* What happened */}
               <div style={styles.section}>
@@ -113,8 +143,8 @@ export default function CaseView({ caseData, onDecide, userDecision, completed }
 
               {completed && (
                 <div style={styles.completedBadge}>
-                  <span style={{ color: '#c5f135', marginRight: 8 }}>✓</span>
-                  Case completed · +{correct ? 30 : 15} XP earned
+                  <span style={{ color: '#c5f135', marginRight: 8 }}>\u2713</span>
+                  Case completed \u00b7 +{correct ? 30 : 15} XP earned
                 </div>
               )}
             </div>
@@ -127,6 +157,26 @@ export default function CaseView({ caseData, onDecide, userDecision, completed }
 
 const styles = {
   wrap: { height: '100%', display: 'flex', flexDirection: 'column' },
+  bestTag: {
+    fontFamily: 'DM Mono, monospace', fontSize: 9, letterSpacing: 1,
+    color: '#0c0d0b', background: '#c5f135', padding: '2px 7px', borderRadius: 10,
+  },
+  yoursTag: {
+    fontFamily: 'DM Mono, monospace', fontSize: 9, letterSpacing: 1,
+    color: '#ff6b5e', border: '1px solid #ff6b5e', padding: '1px 6px', borderRadius: 10,
+  },
+  calcBox: {
+    background: '#101109', border: '1px solid #252820', borderLeft: '3px solid #88b4d4',
+    borderRadius: 12, padding: '16px 18px', marginBottom: 24,
+  },
+  calcLabel: {
+    fontFamily: 'DM Mono, monospace', fontSize: 10, letterSpacing: 2,
+    color: '#88b4d4', marginBottom: 12,
+  },
+  calcLine: {
+    fontFamily: 'DM Mono, monospace', fontSize: 13, lineHeight: 1.7,
+    color: '#cdd3c4', margin: '2px 0', whiteSpace: 'pre-wrap',
+  },
   header: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '14px 20px', borderBottom: '1px solid #252820', flexShrink: 0,

@@ -119,6 +119,7 @@ REQUIREMENTS:
 - Provide EXACTLY 4 options (A, B, C, D), all plausible, differing in subtle but important ways.
 - The genuinely best/what-actually-happened answer must be option "${correctSlot}". Build the options so that "${correctSlot}" is the strongest choice on the merits — but make the other three defensible enough that it's a real decision.
 - Difficulty: an experienced investor should still find it genuinely hard.
+- Include a "calculation" field: the actual step-by-step math that decides the answer. Use plain arithmetic the reader can follow line by line (e.g. "Entry: $40M EV / $8M EBITDA = 5.0x", "Exit: $12M EBITDA x 6.0x = $72M", "Equity in: $15M -> Equity out: $52M = 3.5x MOIC"). One step per line, separated by newlines. Show the numbers for the winning option AND why at least one tempting alternative is worse.
 
 Return JSON with this EXACT shape:
 {
@@ -129,6 +130,7 @@ Return JSON with this EXACT shape:
   "title": "Short, specific decision title (not a grand headline)",
   "context": "EXACTLY 2 short paragraphs, dense with real numbers and parameters. Set up the decision precisely.",
   "decision": "The precise question being decided, in one sentence.",
+  "calculation": "The step-by-step math, one step per line separated by \\n. Plain arithmetic the reader can verify. Show why the best option wins on the numbers.",
   "options": {
     "A": { "label": "short label", "description": "1-2 sentences with the specific logic/numbers of this choice" },
     "B": { "label": "short label", "description": "1-2 sentences with the specific logic/numbers of this choice" },
