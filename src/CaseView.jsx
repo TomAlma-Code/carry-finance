@@ -14,6 +14,12 @@ export default function CaseView({ caseData, onDecide, userDecision, completed }
   const domainColor = domainColors[caseData.domain] || '#c5f135'
   const correct = chosen === caseData.actualChoice
 
+  // Support both new (options{}) and legacy (optionA/optionB) shapes
+  const optMap = caseData.options || {
+    A: caseData.optionA, B: caseData.optionB,
+  }
+  const opts = Object.entries(optMap).filter(([, v]) => v)
+
   const handleChoose = (option) => {
     if (revealed) return
     setChosen(option)
@@ -54,20 +60,15 @@ export default function CaseView({ caseData, onDecide, userDecision, completed }
           {!revealed ? (
             <div style={styles.options}>
               <p style={styles.choosePrompt}>What would you do?</p>
-              <button style={styles.optionBtn} onClick={() => handleChoose('A')}>
-                <span style={styles.optionKey}>A</span>
-                <div>
-                  <div style={styles.optionLabel}>{caseData.optionA.label}</div>
-                  <div style={styles.optionDesc}>{caseData.optionA.description}</div>
-                </div>
-              </button>
-              <button style={styles.optionBtn} onClick={() => handleChoose('B')}>
-                <span style={styles.optionKey}>B</span>
-                <div>
-                  <div style={styles.optionLabel}>{caseData.optionB.label}</div>
-                  <div style={styles.optionDesc}>{caseData.optionB.description}</div>
-                </div>
-              </button>
+              {opts.map(([key, opt]) => (
+                <button key={key} style={styles.optionBtn} onClick={() => handleChoose(key)}>
+                  <span style={styles.optionKey}>{key}</span>
+                  <div>
+                    <div style={styles.optionLabel}>{opt.label}</div>
+                    <div style={styles.optionDesc}>{opt.description}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           ) : (
             <div style={styles.revealSection}>
@@ -89,10 +90,10 @@ export default function CaseView({ caseData, onDecide, userDecision, completed }
                   </span>
                 </div>
                 <p style={{ fontSize: 14, color: '#7a7d6e', fontFamily: 'DM Mono, monospace' }}>
-                  You chose {chosen}: {chosen === 'A' ? caseData.optionA.label : caseData.optionB.label}
+                  You chose {chosen}: {optMap[chosen]?.label}
                 </p>
                 <p style={{ fontSize: 13, color: '#7a7d6e', marginTop: 4, fontFamily: 'DM Mono, monospace' }}>
-                  They chose {caseData.actualChoice}: {caseData.actualChoice === 'A' ? caseData.optionA.label : caseData.optionB.label}
+                  Best answer {caseData.actualChoice}: {optMap[caseData.actualChoice]?.label}
                 </p>
               </div>
 

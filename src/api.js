@@ -94,58 +94,68 @@ Return JSON with this exact shape:
 }
 
 export async function generateCase(conceptsSeen = [], casesDone = []) {
-  const systemPrompt = `You are designing genuinely hard investment decision cases for a VC/impact investor in training.
-Cases should be based on real companies and real situations. The decision should be genuinely difficult — a smart person could go either way.
-Make the reader feel the weight of the decision. Include enough context that they can reason carefully.
+  // Randomize which position is correct so it's not always A
+  const correctSlot = ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)]
+
+  const systemPrompt = `You are designing genuinely hard, technical investment decision cases for a VC/PE/impact investor in training.
+These are NOT big famous narrative stories. They are small, specific, numbers-driven decisions of the kind a junior investor faces weekly.
+The reader should have to actually reason with the numbers — multiples, dilution, IRR, ownership math, unit economics, debt terms.
+The four options must all be plausible. A smart person should find at least two genuinely tempting. Avoid making the right answer obvious.
 Always respond with valid JSON only. No markdown fences, no preamble.`
 
-  const doneNote = casesDone.length > 0 
-    ? `Cases already used: ${casesDone.slice(-5).join(', ')}. Use different companies.` 
+  const doneNote = casesDone.length > 0
+    ? `Avoid these recently used setups: ${casesDone.slice(-6).join(', ')}.`
     : ''
 
-  const prompt = `Create a real-world investment/strategy decision case for a VC and impact investor in training.
+  const prompt = `Create ONE small, hard, realistic investment decision case. Think of a concrete moment, not a grand story.
 
 ${doneNote}
 
-The case should:
-- Be based on a real company at a real decision point (can be historical — 2005-2023)
-- Cover one of these domains: VC investment decision, PE turnaround, impact investing tradeoff, capital allocation, strategic pivot
-- Present genuine ambiguity — a smart investor could reasonably choose either option
-- Include specific numbers, market context, and founder/company details
-- Reveal what actually happened and the finance lesson behind it
+REQUIREMENTS:
+- Small in scope: a single decision a real investor/operator faced (e.g. "accept this term sheet or counter", "which of these debt structures", "exercise pro-rata or not", "price this round at X or Y").
+- Grounded in real-world practice. Can be inspired by real companies/situations (2008-2024) but the focus is the DECISION MATH, not the company's life story.
+- MUST include hard numbers in the context: valuations, ownership %, revenue, growth rates, multiples, dilution, IRR/MOIC, debt terms, etc. The reader should be able to do back-of-envelope math.
+- Keep context SHORT: 2 tight paragraphs maximum. Dense with parameters, not narrative fluff.
+- Provide EXACTLY 4 options (A, B, C, D), all plausible, differing in subtle but important ways.
+- The genuinely best/what-actually-happened answer must be option "${correctSlot}". Build the options so that "${correctSlot}" is the strongest choice on the merits — but make the other three defensible enough that it's a real decision.
+- Difficulty: an experienced investor should still find it genuinely hard.
 
-Return JSON with this exact shape:
+Return JSON with this EXACT shape:
 {
-  "id": "company-name-year",
-  "company": "Company Name",
-  "year": 2012,
+  "id": "short-slug-${Date.now().toString().slice(-5)}",
+  "company": "Company or scenario name",
+  "year": 2019,
   "domain": "VC DECISION | PE TURNAROUND | IMPACT TRADEOFF | CAPITAL ALLOCATION",
-  "title": "Compelling case title",
-  "context": "3-4 paragraphs of rich context. Real numbers. Real situation. The reader needs to feel like they're in the room. Make it gripping.",
-  "decision": "The exact question the decision-maker faced — one clear choice between two paths",
-  "optionA": {
-    "label": "short label",
-    "description": "2-3 sentences explaining this path and its logic"
+  "title": "Short, specific decision title (not a grand headline)",
+  "context": "EXACTLY 2 short paragraphs, dense with real numbers and parameters. Set up the decision precisely.",
+  "decision": "The precise question being decided, in one sentence.",
+  "options": {
+    "A": { "label": "short label", "description": "1-2 sentences with the specific logic/numbers of this choice" },
+    "B": { "label": "short label", "description": "1-2 sentences with the specific logic/numbers of this choice" },
+    "C": { "label": "short label", "description": "1-2 sentences with the specific logic/numbers of this choice" },
+    "D": { "label": "short label", "description": "1-2 sentences with the specific logic/numbers of this choice" }
   },
-  "optionB": {
-    "label": "short label", 
-    "description": "2-3 sentences explaining this path and its logic"
-  },
-  "actualChoice": "A or B",
-  "outcome": "2-3 paragraphs: what actually happened, the numbers, and why. Be specific.",
-  "lessonTitle": "The finance principle this case teaches",
-  "lesson": "2-3 sentences connecting the outcome to a transferable finance/investing principle"
+  "actualChoice": "${correctSlot}",
+  "outcome": "2 short paragraphs: what the numbers actually implied and what happened. Reference the specific figures. Explain why ${correctSlot} was right and why the tempting alternatives fell short.",
+  "lessonTitle": "The transferable principle (short)",
+  "lesson": "1-2 sentences connecting to a reusable investing principle."
 }`
 
   const raw = await callClaude(prompt, systemPrompt)
   try {
-    const c=raw.replace(/```json|```/g,"").trim();const s=c.indexOf("{");const e=c.lastIndexOf("}");if(s<0||e<0)return null;return JSON.parse(c.slice(s,e+1))
-  } catch {
+    const c = raw.replace(/```json|```/g, "").trim()
+    const s = c.indexOf("{"); const e = c.lastIndexOf("}")
+    if (s < 0 || e < 0) return null
+    const parsed = JSON.parse(c.slice(s, e + 1))
+    // Safety: force actualChoice to the slot we asked for
+    parsed.actualChoice = correctSlot
+    return parsed
+  } catch (err) {
+    console.error("Case parse error:", err)
     return null
   }
 }
 
-// Pick today's concept based on what's been seen
 export function pickConcept(conceptsSeen = []) {
   const unseen = CONCEPTS.filter(c => !conceptsSeen.includes(c))
   const pool = unseen.length > 0 ? unseen : CONCEPTS
