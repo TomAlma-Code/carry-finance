@@ -7,11 +7,11 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   if (req.method === 'OPTIONS') return res.status(200).end()
+
   const isSelfTest = req.method === 'GET' && (req.url || '').includes('selftest=1')
   if (req.method !== 'POST' && !isSelfTest) return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    // Get the Claude key from Supabase (stored securely server-side)
     const cfgRes = await fetch(`${SUPA_URL}/rest/v1/config?key=eq.ak&select=value`, {
       headers: { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}` }
     })
@@ -22,7 +22,6 @@ export default async function handler(req, res) {
     let body = req.body
     if (typeof body === 'string') body = JSON.parse(body)
     if (isSelfTest) body = { model: 'claude-sonnet-4-6', max_tokens: 30, messages: [{ role: 'user', content: 'Reply with: OK' }] }
-    if (isSelfTest) body = { model: 'claude-sonnet-4-20250514', max_tokens: 30, messages: [{ role: 'user', content: 'Reply with the single word: OK' }] }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
