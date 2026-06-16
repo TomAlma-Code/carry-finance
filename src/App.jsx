@@ -7,7 +7,7 @@ import { loadProgress, saveProgress, saveDecision, loadTodayContent, saveTodayCo
 import { generateArticle, generateCase, pickConcept } from './api'
 
 const TODAY = new Date().toISOString().split('T')[0]
-const LS_CONTENT = `carry_content_v3_${TODAY}`
+const LS_CONTENT = `carry_content_v4_${TODAY}`
 const LS_PROGRESS = `carry_progress_${TODAY}`
 
 function getCachedContent() {

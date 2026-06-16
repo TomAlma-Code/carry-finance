@@ -7,10 +7,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   if (req.method === 'OPTIONS') return res.status(200).end()
-
-  // TEMP self-test: GET /api/generate?selftest=1 exercises the full proxy path
-  const isSelfTest = req.method === 'GET' && (req.query?.selftest === '1' || (req.url || '').includes('selftest=1'))
-  if (req.method !== 'POST' && !isSelfTest) return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
     // Get the Claude key from Supabase (stored securely server-side)
