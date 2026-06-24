@@ -38,20 +38,60 @@ export const CONCEPTS = [
   'Impact multiples of money (IMM) as a returns framework',
 ]
 
-async function callClaude(prompt, systemPrompt) {
+async function callClaude(prompt, systemPrompt, maxTokens = 4000) {
   const response = await fetch(ANTHROPIC_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }]
     })
   })
   const data = await response.json()
-  return data.content?.[0]?.text || ''
+  if (data.error) throw new Error(data.error.message || 'API error')
+  // Concatenate all text blocks in case the response is split
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
+  return text
 }
+
+// Robust JSON extraction that tolerates markdown fences, stray prose,
+// and (best-effort) truncated responses.
+function parseJsonLoose(raw) {
+  if (!raw) return null
+  let c = raw.replace(/```json|```/g, '').trim()
+  const s = c.indexOf('{')
+  if (s < 0) return null
+  c = c.slice(s)
+  // Try direct parse from first { to last }
+  const e = c.lastIndexOf('}')
+  if (e > 0) {
+    try { return JSON.parse(c.slice(0, e + 1)) } catch {}
+  }
+  // Best-effort repair for truncated JSON: balance braces/brackets
+  try {
+    let depthCurly = 0, depthSquare = 0, inStr = false, esc = false, out = ''
+    for (const ch of c) {
+      out += ch
+      if (esc) { esc = false; continue }
+      if (ch === '\\') { esc = true; continue }
+      if (ch === '"') inStr = !inStr
+      if (inStr) continue
+      if (ch === '{') depthCurly++
+      else if (ch === '}') depthCurly--
+      else if (ch === '[') depthSquare++
+      else if (ch === ']') depthSquare--
+    }
+    if (inStr) out += '"'
+    while (depthSquare-- > 0) out += ']'
+    while (depthCurly-- > 0) out += '}'
+    return JSON.parse(out)
+  } catch {
+    return null
+  }
+}
+
 
 export async function generateArticle(concept, conceptsSeen = []) {
   const systemPrompt = `You are a world-class finance educator writing for an ambitious person learning VC and impact investing. 
@@ -85,10 +125,11 @@ Return JSON with this exact shape:
   "keyTakeaway": "one crisp sentence — the single most important thing to remember"
 }`
 
-  const raw = await callClaude(prompt, systemPrompt)
+  const raw = await callClaude(prompt, systemPrompt, 5000)
   try {
-    const c=raw.replace(/```json|```/g,"").trim();const s=c.indexOf("{");const e=c.lastIndexOf("}");if(s<0||e<0)return null;return JSON.parse(c.slice(s,e+1))
-  } catch {
+    return parseJsonLoose(raw)
+  } catch (err) {
+    console.error('Article parse error:', err)
     return null
   }
 }
@@ -143,12 +184,10 @@ Return JSON with this EXACT shape:
   "lesson": "1-2 sentences connecting to a reusable investing principle."
 }`
 
-  const raw = await callClaude(prompt, systemPrompt)
+  const raw = await callClaude(prompt, systemPrompt, 5000)
   try {
-    const c = raw.replace(/```json|```/g, "").trim()
-    const s = c.indexOf("{"); const e = c.lastIndexOf("}")
-    if (s < 0 || e < 0) return null
-    const parsed = JSON.parse(c.slice(s, e + 1))
+    const parsed = parseJsonLoose(raw)
+    if (!parsed) return null
     // Safety: force actualChoice to the slot we asked for
     parsed.actualChoice = correctSlot
     return parsed
