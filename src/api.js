@@ -99,8 +99,8 @@ Your writing style: narrative, gripping, real. You explain finance through stori
 No bullet points in the main body. Write like a great long-form journalist who happens to know finance deeply.
 Always respond with valid JSON only. No markdown fences, no preamble.`
 
-  const seenNote = conceptsSeen.length > 0 
-    ? `Concepts already covered: ${conceptsSeen.slice(-8).join(', ')}. Don't repeat these.` 
+  const seenNote = conceptsSeen.length > 0
+    ? `Concepts ALREADY covered (do not repeat or substantially overlap with ANY of these): ${conceptsSeen.join('; ')}.`
     : ''
 
   const prompt = `Write a 5-7 minute read explaining the finance concept: "${concept}"
@@ -134,13 +134,115 @@ Return JSON with this exact shape:
   }
 }
 
+
+// Ordered accounting curriculum — builds knowledge step by step.
+// Lesson N assumes lessons 0..N-1 are understood.
+export const ACCOUNTING_CURRICULUM = [
+  'The three financial statements and how they connect',
+  'Reading a balance sheet: assets, liabilities, and what equity really means',
+  'The income statement: revenue recognition, COGS, and the path to net income',
+  'Cash flow statement basics: operating, investing, financing',
+  'Accrual vs. cash accounting: why profits and cash diverge',
+  'Working capital: receivables, payables, inventory and the cash conversion cycle',
+  'Depreciation and amortization: how capex flows through the statements',
+  'EBITDA: what it captures, what it hides, and why investors use it',
+  'Free cash flow: from EBITDA to FCF step by step',
+  'Deferred revenue and contract liabilities: SaaS accounting essentials',
+  'Capitalized costs vs. expenses: R&D, software, and earnings quality',
+  'Goodwill and intangibles: what acquisitions do to the balance sheet',
+  'Leases on the balance sheet: operating vs. finance leases after IFRS 16',
+  'Stock-based compensation: the expense investors love to ignore',
+  'Net working capital in M&A: pegs, adjustments, and deal mechanics',
+  'Quality of earnings: spotting aggressive accounting before you invest',
+  'Debt schedules: reading covenants, maturities, and interest coverage',
+  'Return metrics: ROIC, ROE, ROA — computing and interpreting them',
+  'Inventory accounting: FIFO, LIFO, and margin distortion',
+  'Consolidation, minority interest, and equity method investments',
+  'Cash flow manipulation: classic red flags in the CFO section',
+  'Purchase price allocation: what happens to the books after a buyout',
+  'Unit economics from the ledger: mapping GAAP lines to CAC and LTV',
+  'Building a simple 3-statement model: tying it all together',
+]
+
+export async function generateAccountingArticle(lessonIndex) {
+  const idx = Math.min(lessonIndex, ACCOUNTING_CURRICULUM.length - 1)
+  const topic = ACCOUNTING_CURRICULUM[idx]
+  const priorTopics = ACCOUNTING_CURRICULUM.slice(0, idx)
+
+  const systemPrompt = `You are a world-class accounting and finance educator teaching an aspiring VC/PE investor.
+This is lesson ${idx + 1} of a sequential curriculum. The reader has already covered: ${priorTopics.length > 0 ? priorTopics.join('; ') : 'nothing yet — this is the first lesson'}.
+Build on prior lessons naturally, referencing them briefly where helpful, but never re-explain them at length.
+Always connect accounting mechanics to INVESTING decisions — how a VC or PE investor uses this in diligence, valuation, or portfolio work.
+Use one running real-company example with plausible numbers through the piece. Show small worked calculations inline.
+Always respond with valid JSON only. No markdown fences, no preamble.`
+
+  const prompt = `Write lesson ${idx + 1} of the accounting-for-investors curriculum: "${topic}"
+
+Rules:
+- 500-800 words, clear and progressive — this is a curriculum, so precision beats flair (but keep it engaging)
+- Use ONE real or realistic company example woven through, with actual numbers the reader can follow
+- Include at least one small worked calculation shown step by step in the text
+- End with "How investors use this" — 2-3 sentences tying it to diligence/valuation decisions
+- Assume the reader knows the prior lessons listed in the system prompt
+
+Return JSON with this exact shape:
+{
+  "concept": "${topic}",
+  "lessonNumber": ${idx + 1},
+  "title": "clear lesson title (can include the lesson number)",
+  "readTime": "5 min",
+  "tag": "LEDGER \u00b7 LESSON ${idx + 1}/${ACCOUNTING_CURRICULUM.length}",
+  "hook": "one sentence on why this matters for investing",
+  "body": "the full lesson \u2014 500-800 words, paragraphs separated by \\n\\n",
+  "keyTakeaway": "one crisp sentence"
+}`
+
+  const raw = await callClaude(prompt, systemPrompt, 5000)
+  try {
+    return parseJsonLoose(raw)
+  } catch (err) {
+    console.error('Accounting article parse error:', err)
+    return null
+  }
+}
+
+const CASE_STYLES = [
+  {
+    name: 'DEAL MATH',
+    brief: 'A numbers-first decision: term sheets, round pricing, debt structures, waterfall/dilution math. The winning option is provable with arithmetic.',
+    calcRole: 'The calculation fully decides the answer \u2014 show the arithmetic that proves it.'
+  },
+  {
+    name: 'STRATEGIC JUDGMENT',
+    brief: 'A strategy decision where numbers inform but do NOT decide: market entry/exit, pivot vs. persevere, build vs. buy vs. partner, founder/CEO decisions, competitive response. The best answer turns on strategic reasoning \u2014 positioning, timing, incentives, second-order effects.',
+    calcRole: 'The calculation frames the stakes, but the deciding logic is strategic \u2014 explain the qualitative reasoning that tips it.'
+  },
+  {
+    name: 'NEGOTIATION & TERMS',
+    brief: 'A negotiation moment: which term to concede, counteroffer design, board seat vs. valuation tradeoffs, earnout structures, LP side letters. Winner balances economics against control, alignment, and relationship.',
+    calcRole: 'Quantify what each term is worth, then weigh it against the non-financial considerations.'
+  },
+  {
+    name: 'PORTFOLIO & TIMING',
+    brief: 'A portfolio-level or timing call: reserve allocation, when to sell/secondary, follow-on into a struggling company, fund pacing, concentration risk. Winner requires thinking in portfolio math AND judgment about information/timing.',
+    calcRole: 'Show the portfolio-level math (ownership, reserves, expected value), then the timing/judgment reasoning.'
+  },
+  {
+    name: 'OPERATOR CRISIS',
+    brief: 'An in-company decision under pressure: runway crunch choices, layoffs vs. bridge, pricing change, key-customer ultimatum, supply shock. The investor advises the board. Winner blends cash math with organizational and market reality.',
+    calcRole: 'Show the cash/runway math, then the operational reasoning that determines the best path.'
+  },
+]
+
 export async function generateCase(conceptsSeen = [], casesDone = []) {
   // Randomize which position is correct so it's not always A
   const correctSlot = ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)]
+  // Rotate case style for variety
+  const style = CASE_STYLES[Math.floor(Math.random() * CASE_STYLES.length)]
 
-  const systemPrompt = `You are designing genuinely hard, technical investment decision cases for a VC/PE/impact investor in training.
-These are NOT big famous narrative stories. They are small, specific, numbers-driven decisions of the kind a junior investor faces weekly.
-The reader should have to actually reason with the numbers — multiples, dilution, IRR, ownership math, unit economics, debt terms.
+  const systemPrompt = `You are designing genuinely hard investment decision cases for a VC/PE/impact investor in training.
+Today's case style is "${style.name}": ${style.brief}
+The reader should have to genuinely reason \u2014 with numbers where they decide, with strategic judgment where they don't.
 The four options must all be plausible. A smart person should find at least two genuinely tempting. Avoid making the right answer obvious.
 Always respond with valid JSON only. No markdown fences, no preamble.`
 
@@ -153,21 +255,22 @@ Always respond with valid JSON only. No markdown fences, no preamble.`
 ${doneNote}
 
 REQUIREMENTS:
-- Small in scope: a single decision a real investor/operator faced (e.g. "accept this term sheet or counter", "which of these debt structures", "exercise pro-rata or not", "price this round at X or Y").
-- Grounded in real-world practice. Can be inspired by real companies/situations (2008-2024) but the focus is the DECISION MATH, not the company's life story.
-- MUST include hard numbers in the context: valuations, ownership %, revenue, growth rates, multiples, dilution, IRR/MOIC, debt terms, etc. The reader should be able to do back-of-envelope math.
-- Keep context SHORT: 2 tight paragraphs maximum. Dense with parameters, not narrative fluff.
-- Provide EXACTLY 4 options (A, B, C, D), all plausible, differing in subtle but important ways.
-- The genuinely best/what-actually-happened answer must be option "${correctSlot}". Build the options so that "${correctSlot}" is the strongest choice on the merits — but make the other three defensible enough that it's a real decision.
+- Case style: ${style.name}. ${style.brief}
+- Small in scope: ONE concrete decision at one moment in time. Not a company's whole story.
+- Grounded in real-world practice, inspired by real companies/situations (2008-2024).
+- Include hard numbers in the context: valuations, ownership %, revenue, growth, multiples, cash, debt terms as relevant. The reader should be able to reason with them.
+- Keep context SHORT: 2 tight paragraphs maximum. Dense, no fluff.
+- Provide EXACTLY 4 options (A, B, C, D), all plausible, differing in subtle but important ways. For strategy-flavored styles, options should represent genuinely different strategic logics, not just different numbers.
+- The genuinely best answer must be option "${correctSlot}". Build the options so "${correctSlot}" is strongest on the merits \u2014 but the other three must be defensible enough that it's a real decision.
 - Difficulty: an experienced investor should still find it genuinely hard.
-- Include a "calculation" field: the actual step-by-step math that decides the answer. Use plain arithmetic the reader can follow line by line (e.g. "Entry: $40M EV / $8M EBITDA = 5.0x", "Exit: $12M EBITDA x 6.0x = $72M", "Equity in: $15M -> Equity out: $52M = 3.5x MOIC"). One step per line, separated by newlines. Show the numbers for the winning option AND why at least one tempting alternative is worse.
+- Include a "calculation" field: ${style.calcRole} One step or point per line, separated by newlines. Plain arithmetic where used (e.g. "Entry: $40M EV / $8M EBITDA = 5.0x"). For judgment-heavy cases, this block may mix key figures with short decisive reasoning lines.
 
 Return JSON with this EXACT shape:
 {
   "id": "short-slug-${Date.now().toString().slice(-5)}",
   "company": "Company or scenario name",
   "year": 2019,
-  "domain": "VC DECISION | PE TURNAROUND | IMPACT TRADEOFF | CAPITAL ALLOCATION",
+  "domain": "${style.name}",
   "title": "Short, specific decision title (not a grand headline)",
   "context": "EXACTLY 2 short paragraphs, dense with real numbers and parameters. Set up the decision precisely.",
   "decision": "The precise question being decided, in one sentence.",

@@ -1,8 +1,9 @@
 import React from 'react'
 
-export default function HomeScreen({ progress, todayContent, onOpenArticle, onOpenCase }) {
+export default function HomeScreen({ progress, todayContent, onOpenArticle, onOpenCase, onOpenLedger }) {
   const articleDone = progress?.article_read_today
   const caseDone = progress?.case_done_today
+  const ledgerDone = progress?.ledger_read_today
   const streak = progress?.streak || 1
   const xp = progress?.xp || 0
 
@@ -66,6 +67,28 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
             <div style={styles.cardPlaceholder}>Loading article…</div>
           )}
           <div style={styles.cardArrow}>→</div>
+        </div>
+
+        {/* Ledger (accounting curriculum) card */}
+        <div
+          style={{ ...styles.card, borderLeft: '3px solid #88b4d4', opacity: ledgerDone ? 0.7 : 1 }}
+          onClick={onOpenLedger}
+        >
+          <div style={styles.cardTop}>
+            <span style={{ ...styles.cardType, color: '#88b4d4' }}>THE LEDGER</span>
+            {ledgerDone && <span style={styles.doneBadge}>✓ Read</span>}
+          </div>
+          {todayContent?.ledger ? (
+            <>
+              <div style={{ ...styles.cardTag, color: '#88b4d4' }}>{todayContent.ledger.tag}</div>
+              <h2 style={styles.cardTitle}>{todayContent.ledger.title}</h2>
+              <p style={styles.cardHook}>{todayContent.ledger.hook}</p>
+              <div style={styles.cardMeta}>{todayContent.ledger.readTime} read · +20 XP · builds on previous lessons</div>
+            </>
+          ) : (
+            <div style={styles.cardPlaceholder}>Loading lesson…</div>
+          )}
+          <div style={{ ...styles.cardArrow, color: '#88b4d4' }}>→</div>
         </div>
 
         {/* Case card */}

@@ -4,10 +4,10 @@ import HomeScreen from './HomeScreen'
 import ArticleView from './ArticleView'
 import CaseView from './CaseView'
 import { loadProgress, saveProgress, saveDecision, loadTodayContent, saveTodayContent } from './supabase'
-import { generateArticle, generateCase, pickConcept } from './api'
+import { generateArticle, generateCase, generateAccountingArticle, pickConcept } from './api'
 
 const TODAY = new Date().toISOString().split('T')[0]
-const LS_CONTENT = `carry_content_v5_${TODAY}`
+const LS_CONTENT = `carry_content_v6_${TODAY}`
 const LS_PROGRESS = `carry_progress_${TODAY}`
 
 function getCachedContent() {
@@ -49,7 +49,7 @@ export default function App() {
         loadProgress().then(async prog => {
           if (!prog) return
           if (prog.last_active !== TODAY) {
-            prog = await saveProgress({ article_read_today: false, case_done_today: false })
+            prog = await saveProgress({ article_read_today: false, case_done_today: false, ledger_read_today: false })
           }
           setProgress(prog)
           setCachedProgress(prog)
@@ -64,7 +64,7 @@ export default function App() {
         prog = await saveProgress({ xp: 0, concepts_seen: [], cases_done: [], article_read_today: false, case_done_today: false })
       }
       if (prog && prog.last_active !== TODAY) {
-        prog = await saveProgress({ article_read_today: false, case_done_today: false })
+        prog = await saveProgress({ article_read_today: false, case_done_today: false, ledger_read_today: false })
       }
       setProgress(prog || { xp: 0, streak: 1, concepts_seen: [], cases_done: [] })
       if (prog) setCachedProgress(prog)
@@ -75,7 +75,8 @@ export default function App() {
 
       if (content?.article_json && content?.case_json) {
         // Found in Supabase — cache locally and show
-        const parsed = { article: content.article_json, case: content.case_json }
+        const cj = content.case_json
+        const parsed = { article: content.article_json, case: cj, ledger: cj?._ledger || null }
         setCachedContent(parsed)
         setTodayContent(parsed)
         setScreen('home')
@@ -86,6 +87,7 @@ export default function App() {
       const conceptsSeen = prog?.concepts_seen || []
       const casesDone = prog?.cases_done || []
       const concept = pickConcept(conceptsSeen)
+      const lessonIdx = prog?.accounting_lesson || 0
       setLoadingMsg(`Writing: ${concept.split(' ').slice(0, 4).join(' ')}...`)
 
       // Generate with one retry each — these calls occasionally return malformed JSON
@@ -94,19 +96,27 @@ export default function App() {
         if (!r) r = await fn()
         return r
       }
-      const [article, caseData] = await Promise.all([
+      const [article, caseData, ledger] = await Promise.all([
         withRetry(() => generateArticle(concept, conceptsSeen)),
-        withRetry(() => generateCase(conceptsSeen, casesDone))
+        withRetry(() => generateCase(conceptsSeen, casesDone)),
+        withRetry(() => generateAccountingArticle(lessonIdx))
       ])
 
       if (!article || !caseData) throw new Error('Content generation failed — tap Try again')
 
-      const parsed = { article, case: caseData }
+      const parsed = { article, case: caseData, ledger }
       setCachedContent(parsed)
       setTodayContent(parsed)
 
+      // Record today's concept as seen IMMEDIATELY (prevents repeats even if not marked read)
+      if (article?.concept && !conceptsSeen.includes(article.concept)) {
+        saveProgress({ concepts_seen: [...conceptsSeen, article.concept] })
+          .then(p => { if (p) { setProgress(p); setCachedProgress(p) } })
+          .catch(console.error)
+      }
+
       // Save to Supabase (don't await — let it happen in background)
-      saveTodayContent({ article_json: article, case_json: caseData }).catch(console.error)
+      saveTodayContent({ article_json: article, case_json: { ...caseData, _ledger: ledger } }).catch(console.error)
 
       setScreen('home')
     } catch (err) {
@@ -120,6 +130,16 @@ export default function App() {
       article_read_today: true,
       xp: (progress?.xp || 0) + 20,
       concepts_seen: [...(progress?.concepts_seen || []), todayContent?.article?.concept].filter(Boolean),
+    })
+    setProgress(updated)
+    setCachedProgress(updated)
+  }
+
+  async function handleLedgerComplete() {
+    const updated = await saveProgress({
+      ledger_read_today: true,
+      xp: (progress?.xp || 0) + 20,
+      accounting_lesson: (progress?.accounting_lesson || 0) + 1,
     })
     setProgress(updated)
     setCachedProgress(updated)
@@ -165,8 +185,9 @@ export default function App() {
       </header>
 
       <div style={{ flex:1, overflow:'hidden' }}>
-        {screen === 'home' && <HomeScreen progress={progress} todayContent={todayContent} onOpenArticle={() => setScreen('article')} onOpenCase={() => setScreen('case')} />}
+        {screen === 'home' && <HomeScreen progress={progress} todayContent={todayContent} onOpenArticle={() => setScreen('article')} onOpenCase={() => setScreen('case')} onOpenLedger={() => setScreen('ledger')} />}
         {screen === 'article' && todayContent?.article && <ArticleView article={todayContent.article} onComplete={handleArticleComplete} completed={progress?.article_read_today} />}
+        {screen === 'ledger' && todayContent?.ledger && <ArticleView article={todayContent.ledger} onComplete={handleLedgerComplete} completed={progress?.ledger_read_today} />}
         {screen === 'case' && todayContent?.case && <CaseView caseData={todayContent.case} onDecide={handleCaseDecide} userDecision={progress?.case_done_today ? 'done' : null} completed={progress?.case_done_today} />}
       </div>
 
@@ -177,6 +198,9 @@ export default function App() {
           </button>
           <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:11, padding:'10px 4px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('article')}>
             <span style={{fontSize:16}}>▦</span><span>Article</span>
+          </button>
+          <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:11, padding:'10px 4px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('ledger')}>
+            <span style={{fontSize:16}}>▤</span><span>Ledger</span>
           </button>
           <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:11, padding:'10px 4px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('case')}>
             <span style={{fontSize:16}}>❖</span><span>Case</span>
