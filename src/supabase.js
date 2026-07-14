@@ -36,7 +36,7 @@ export async function saveProgress(updates) {
 
   const { data: existing } = await supabase
     .from('progress')
-    .select('id, streak, last_active, xp')
+    .select('*')
     .eq('user_id', userId)
     .single()
 
