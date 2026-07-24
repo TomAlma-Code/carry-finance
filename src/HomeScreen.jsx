@@ -112,6 +112,7 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
             <div style={styles.cardPlaceholder}>Loading case…</div>
           )}
           <div style={{ ...styles.cardArrow, color: '#f2a93b' }}>→</div>
+        </div>
 
         {/* Turnaround case card */}
         <div
@@ -133,7 +134,6 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
             <div style={styles.cardPlaceholder}>Loading case…</div>
           )}
           <div style={{ ...styles.cardArrow, color: '#d98f4b' }}>→</div>
-        </div>
         </div>
 
         {/* XP progress */}
