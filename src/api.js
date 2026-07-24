@@ -300,6 +300,102 @@ Return JSON with this EXACT shape:
   }
 }
 
+
+// ---- TURNAROUND / SCALE-UP CASES -------------------------------------------
+// Same 4-option structure as investment cases, but the decision turns on
+// operating strategy for a struggling or sub-scale business, not deal math.
+const TURNAROUND_STYLES = [
+  {
+    name: 'CASH CRISIS',
+    brief: 'A business running out of money. The decision is about sequencing survival moves: what to cut, what to protect, who to talk to first, and in what order. Cash math frames the runway; judgment decides the path.'
+  },
+  {
+    name: 'DEMAND PROBLEM',
+    brief: 'Revenue has stalled or is declining. The decision is diagnostic: is this a pricing, positioning, channel, product, or market problem? The best answer identifies the true bottleneck rather than treating a symptom.'
+  },
+  {
+    name: 'MARGIN REPAIR',
+    brief: 'Revenue is fine but the business does not make money. The decision is where margin actually leaks: pricing, mix, cost-to-serve, discounting, unit costs, or overhead. Winner fixes the structural cause.'
+  },
+  {
+    name: 'SCALING BOTTLENECK',
+    brief: 'A small but healthy business that cannot grow past a ceiling. The constraint may be founder dependency, ops capacity, hiring, systems, or concentration. Winner removes the true binding constraint.'
+  },
+  {
+    name: 'PEOPLE & OWNERSHIP',
+    brief: 'The problem is organizational: a founder who cannot let go, a wrong-fit key hire, a broken incentive structure, family-business succession, or a demoralized team. Winner addresses the human system driving performance.'
+  },
+  {
+    name: 'CUSTOMER CONCENTRATION',
+    brief: 'The business depends on one or a few customers, channels, or suppliers. The decision balances protecting near-term revenue against reducing structural fragility.'
+  },
+]
+
+export async function generateTurnaroundCase(turnaroundsDone = []) {
+  const correctSlot = ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)]
+  const style = TURNAROUND_STYLES[Math.floor(Math.random() * TURNAROUND_STYLES.length)]
+
+  const systemPrompt = `You are designing realistic turnaround and scale-up decision cases for someone learning to fix and grow real businesses.
+Today's case type is "${style.name}": ${style.brief}
+These are OPERATING decisions, not investment decisions. There is no cap table, no term sheet, no IRR. The reader is effectively the owner, CEO, or operating partner deciding what to actually DO on Monday morning.
+Numbers set the scene and constrain the choices, but the decision is won or lost on operating judgment: diagnosing the real problem, sequencing correctly, and understanding second-order effects on customers, staff, and cash.
+The four options must all be plausible. At least two should be genuinely tempting. Avoid making the right answer obvious.
+Always respond with valid JSON only. No markdown fences, no preamble.`
+
+  const doneNote = turnaroundsDone.length > 0
+    ? `Avoid reusing these recent setups: ${turnaroundsDone.slice(-6).join(', ')}.`
+    : ''
+
+  const prompt = `Create ONE realistic turnaround-or-scale decision case for a small or mid-sized business.
+
+${doneNote}
+
+REQUIREMENTS:
+- Case type: ${style.name}. ${style.brief}
+- The business should be small-to-midsize and relatable: e.g. a 40-person manufacturer, a regional services firm, a 12-location restaurant group, a niche SaaS at 2M ARR, a family wholesaler, a specialty retailer, a logistics operator, a clinic group.
+- ONE concrete decision at ONE moment. Not the company's whole history.
+- The intro MUST include concrete numbers so the reader can reason: revenue, growth or decline %, gross margin, EBITDA or losses, cash on hand, monthly burn, headcount, customer counts/concentration, churn, utilization, or whatever fits the situation. Use 5-8 specific figures.
+- Keep context SHORT: exactly 2 tight paragraphs, dense with facts, no storytelling fluff.
+- The decision must be about OPERATING STRATEGY: what to do, in what order, and why. NOT valuation, dilution, or deal structuring.
+- Provide EXACTLY 4 options (A, B, C, D). Each must represent a genuinely different operating logic (e.g. cut cost vs. reprice vs. refocus segment vs. renegotiate terms) — not four versions of the same move.
+- The genuinely best answer must be option "${correctSlot}". Make "${correctSlot}" strongest on the merits, but the other three must be defensible enough that a smart operator could pick them.
+- Difficulty: an experienced operator should still find it genuinely hard.
+- The "calculation" field here is a DIAGNOSIS block, not heavy math: 4-7 short lines mixing the few figures that matter with the decisive reasoning (e.g. "Runway: 380k cash / 95k burn = 4.0 months", "Top 2 customers = 61% of revenue -> cutting sales headcount risks the base", "Gross margin 34% vs. 51% industry -> problem is pricing, not volume"). One point per line, separated by newlines.
+
+Return JSON with this EXACT shape:
+{
+  "id": "turn-slug-${Date.now().toString().slice(-5)}",
+  "company": "Business name or descriptor",
+  "year": 2021,
+  "domain": "${style.name}",
+  "title": "Short, specific decision title",
+  "context": "EXACTLY 2 short paragraphs, dense with the operating numbers listed above.",
+  "decision": "The precise operating question being decided, in one sentence.",
+  "calculation": "4-7 diagnosis lines separated by \\n, mixing key figures with the decisive reasoning.",
+  "options": {
+    "A": { "label": "short label", "description": "1-2 sentences describing this operating move and its logic" },
+    "B": { "label": "short label", "description": "1-2 sentences describing this operating move and its logic" },
+    "C": { "label": "short label", "description": "1-2 sentences describing this operating move and its logic" },
+    "D": { "label": "short label", "description": "1-2 sentences describing this operating move and its logic" }
+  },
+  "actualChoice": "${correctSlot}",
+  "outcome": "2 short paragraphs: what happened, with specific numbers showing the result. Explain why ${correctSlot} worked and precisely why the most tempting alternative would have failed or underperformed.",
+  "lessonTitle": "The transferable operating principle (short)",
+  "lesson": "1-2 sentences on the reusable turnaround/scaling principle."
+}`
+
+  const raw = await callClaude(prompt, systemPrompt, 5000)
+  try {
+    const parsed = parseJsonLoose(raw)
+    if (!parsed) return null
+    parsed.actualChoice = correctSlot
+    return parsed
+  } catch (err) {
+    console.error('Turnaround case parse error:', err)
+    return null
+  }
+}
+
 export function pickConcept(conceptsSeen = []) {
   const unseen = CONCEPTS.filter(c => !conceptsSeen.includes(c))
   const pool = unseen.length > 0 ? unseen : CONCEPTS

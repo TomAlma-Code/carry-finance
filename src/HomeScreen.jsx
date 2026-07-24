@@ -1,9 +1,10 @@
 import React from 'react'
 
-export default function HomeScreen({ progress, todayContent, onOpenArticle, onOpenCase, onOpenLedger }) {
+export default function HomeScreen({ progress, todayContent, onOpenArticle, onOpenCase, onOpenLedger, onOpenTurnaround }) {
   const articleDone = progress?.article_read_today
   const caseDone = progress?.case_done_today
   const ledgerDone = progress?.ledger_read_today
+  const turnaroundDone = progress?.turnaround_done_today
   const streak = progress?.streak || 1
   const xp = progress?.xp || 0
 
@@ -111,6 +112,28 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
             <div style={styles.cardPlaceholder}>Loading case…</div>
           )}
           <div style={{ ...styles.cardArrow, color: '#f2a93b' }}>→</div>
+
+        {/* Turnaround case card */}
+        <div
+          style={{ ...styles.card, borderLeft: '3px solid #d98f4b', opacity: turnaroundDone ? 0.7 : 1 }}
+          onClick={onOpenTurnaround}
+        >
+          <div style={styles.cardTop}>
+            <span style={{ ...styles.cardType, color: '#d98f4b' }}>TURNAROUND</span>
+            {turnaroundDone && <span style={styles.doneBadge}>✓ Done</span>}
+          </div>
+          {todayContent?.turnaround ? (
+            <>
+              <div style={{ ...styles.cardTag, color: '#d98f4b' }}>{todayContent.turnaround.domain}</div>
+              <h2 style={styles.cardTitle}>{todayContent.turnaround.company} · {todayContent.turnaround.year}</h2>
+              <p style={styles.cardHook}>{todayContent.turnaround.title}</p>
+              <div style={styles.cardMeta}>Operating decision · +30 XP if right</div>
+            </>
+          ) : (
+            <div style={styles.cardPlaceholder}>Loading case…</div>
+          )}
+          <div style={{ ...styles.cardArrow, color: '#d98f4b' }}>→</div>
+        </div>
         </div>
 
         {/* XP progress */}
