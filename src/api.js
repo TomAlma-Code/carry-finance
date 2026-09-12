@@ -50,7 +50,13 @@ async function callClaude(prompt, systemPrompt, maxTokens = 4000) {
     })
   })
   const data = await response.json()
-  if (data.error) throw new Error(data.error.message || 'API error')
+  if (data.error) {
+    const msg = data.error.message || 'API error'
+    if (/credit balance|billing|quota/i.test(msg)) {
+      throw new Error('Anthropic API credits have run out. Top up at console.anthropic.com under Plans & Billing, then tap Try again.')
+    }
+    throw new Error(msg)
+  }
   // Concatenate all text blocks in case the response is split
   const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
   return text
