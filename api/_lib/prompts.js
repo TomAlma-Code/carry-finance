@@ -80,7 +80,7 @@ Return JSON with this exact shape:
   "body": "the full article, 600-900 words, paragraphs separated by \\n\\n, no bullet points",
   "keyTakeaway": "one crisp sentence"
 }`
-  return { system, prompt, maxTokens: 8000 }
+  return { system, prompt, maxTokens: 12000, effort: 'low' }
 }
 
 // ---- INVESTMENT CASE (realistic scenario) -----------------------------------
@@ -130,7 +130,7 @@ Return JSON with this EXACT shape:
   "lessonTitle": "The transferable principle (short)",
   "lesson": "1-2 sentences connecting to a reusable investing principle."
 }`
-  return { system, prompt, maxTokens: 8000 }
+  return { system, prompt, maxTokens: 20000, effort: 'medium' }
 }
 
 // ---- TURNAROUND: REAL CASE FROM LIBRARY --------------------------------------
@@ -186,7 +186,7 @@ Write the case. Return JSON with this EXACT shape:
   "lesson": "1-2 sentences on the reusable turnaround principle."
 }
 The exhibit should have 4-6 rows taken from the facts.`
-  return { system, prompt, maxTokens: 8000 }
+  return { system, prompt, maxTokens: 20000, effort: 'medium' }
 }
 
 // ---- TURNAROUND: FICTIONAL SME FALLBACK ----------------------------------------
@@ -234,7 +234,7 @@ Return JSON with this EXACT shape:
   "lessonTitle": "The transferable operating principle (short)",
   "lesson": "1-2 sentences."
 }`
-  return { system, prompt, maxTokens: 8000 }
+  return { system, prompt, maxTokens: 20000, effort: 'medium' }
 }
 
 // ---- FEEDBACK ON THE USER'S REASONING ----------------------------------------
@@ -253,7 +253,7 @@ Give feedback in 3 parts, plain text:
 1. What was right in their reasoning (1-2 sentences).
 2. What they missed or got wrong (1-2 sentences, specific).
 3. One question they should ask themselves next time (1 sentence).`
-  return { system, prompt, maxTokens: 600 }
+  return { system, prompt, maxTokens: 4000, effort: 'low' }
 }
 
 // ---- PARSING & NORMALISING -----------------------------------------------------

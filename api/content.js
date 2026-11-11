@@ -46,7 +46,12 @@ async function anthropic(path, { method = 'GET', body } = {}) {
 }
 
 function params(req) {
-  return { model: MODEL, max_tokens: req.maxTokens, system: req.system, messages: [{ role: 'user', content: req.prompt }] }
+  // Sonnet 5.5 thinks by default; effort controls how much. max_tokens covers thinking + answer.
+  return {
+    model: MODEL, max_tokens: req.maxTokens, system: req.system,
+    output_config: { effort: req.effort || 'medium' },
+    messages: [{ role: 'user', content: req.prompt }],
+  }
 }
 
 function textOf(message) {
@@ -55,7 +60,10 @@ function textOf(message) {
 
 async function callNow(req) {
   const msg = await anthropic('/messages', { method: 'POST', body: params(req) })
-  if (msg.stop_reason !== 'end_turn') console.error(`[carry] stop_reason=${msg.stop_reason} usage=${JSON.stringify(msg.usage)} blocks=${(msg.content||[]).map(b=>b.type).join(',')}`)
+  if (msg.stop_reason !== 'end_turn') {
+    console.error(`[carry] stop_reason=${msg.stop_reason} output_tokens=${msg.usage?.output_tokens}`)
+    if (msg.stop_reason === 'max_tokens') return '' // treat as failed; caller retries
+  }
   return textOf(msg)
 }
 
@@ -178,7 +186,7 @@ async function collectBatch(userId) {
   for (const line of lines) {
     try {
       const r = JSON.parse(line)
-      if (r.result?.type === 'succeeded') out[r.custom_id] = textOf(r.result.message)
+      if (r.result?.type === 'succeeded' && r.result.message?.stop_reason !== 'max_tokens') out[r.custom_id] = textOf(r.result.message)
     } catch {}
   }
   const rows = []
