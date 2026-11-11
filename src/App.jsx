@@ -3,27 +3,20 @@ import LoadingScreen from './LoadingScreen'
 import HomeScreen from './HomeScreen'
 import ArticleView from './ArticleView'
 import CaseView from './CaseView'
-import { loadProgress, saveProgress, saveDecision, loadTodayContent, saveTodayContent } from './supabase'
-import { generateArticle, generateCase, generateAccountingArticle, generateTurnaroundCase, pickConcept } from './api'
+import { loadProgress, saveProgress, saveDecision } from './supabase'
+import { fetchToday, maintainQueue, localDate } from './api'
 
-const TODAY = new Date().toISOString().split('T')[0]
-const LS_CONTENT = `carry_content_v8_${TODAY}`
+const TODAY = localDate()
+const LS_CONTENT = `carry_bundle_v9_${TODAY}`
 const LS_PROGRESS = `carry_progress_${TODAY}`
+const DAY_RESET = { article_read_today: false, case_done_today: false, turnaround_done_today: false }
 
-function getCachedContent() {
-  try { return JSON.parse(localStorage.getItem(LS_CONTENT)) } catch { return null }
-}
+function readLS(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } }
 function setCachedContent(c) {
-  // Clear old day caches
-  Object.keys(localStorage).filter(k => k.startsWith('carry_content_') && k !== LS_CONTENT).forEach(k => localStorage.removeItem(k))
+  Object.keys(localStorage).filter(k => (k.startsWith('carry_content_') || k.startsWith('carry_bundle_')) && k !== LS_CONTENT).forEach(k => localStorage.removeItem(k))
   localStorage.setItem(LS_CONTENT, JSON.stringify(c))
 }
-function getCachedProgress() {
-  try { return JSON.parse(localStorage.getItem(LS_PROGRESS)) } catch { return null }
-}
-function setCachedProgress(p) {
-  localStorage.setItem(LS_PROGRESS, JSON.stringify(p))
-}
+function setCachedProgress(p) { localStorage.setItem(LS_PROGRESS, JSON.stringify(p)) }
 
 export default function App() {
   const [screen, setScreen] = useState('loading')
@@ -34,141 +27,78 @@ export default function App() {
 
   useEffect(() => { init() }, [])
 
+  async function syncProgress() {
+    let prog = await loadProgress()
+    if (!prog) prog = await saveProgress({ xp: 0, concepts_seen: [], cases_done: [], ...DAY_RESET })
+    else if (prog.last_active !== TODAY) prog = await saveProgress(DAY_RESET)
+    setProgress(prog)
+    setCachedProgress(prog)
+    return prog
+  }
+
   async function init() {
     try {
-      // 1. Try localStorage first — instant load on return visits
-      const cachedContent = getCachedContent()
-      const cachedProgress = getCachedProgress()
+      const cachedContent = readLS(LS_CONTENT)
+      const cachedProgress = readLS(LS_PROGRESS)
 
       if (cachedContent && cachedProgress) {
-        // Instant render from cache
         setTodayContent(cachedContent)
         setProgress(cachedProgress)
         setScreen('home')
-        // Sync progress from Supabase in background, applying day-reset if needed
-        loadProgress().then(async prog => {
-          if (!prog) return
-          if (prog.last_active !== TODAY) {
-            prog = await saveProgress({ article_read_today: false, case_done_today: false, ledger_read_today: false, turnaround_done_today: false })
-          }
-          setProgress(prog)
-          setCachedProgress(prog)
-        })
+        syncProgress().catch(console.error)
+        maintainQueue()
         return
       }
 
-      // 2. No cache — full load
       setLoadingMsg('Loading your progress...')
-      let prog = await loadProgress()
-      if (!prog) {
-        prog = await saveProgress({ xp: 0, concepts_seen: [], cases_done: [], article_read_today: false, case_done_today: false })
-      }
-      if (prog && prog.last_active !== TODAY) {
-        prog = await saveProgress({ article_read_today: false, case_done_today: false, ledger_read_today: false, turnaround_done_today: false })
-      }
-      setProgress(prog || { xp: 0, streak: 1, concepts_seen: [], cases_done: [] })
-      if (prog) setCachedProgress(prog)
+      await syncProgress()
 
-      // 3. Check Supabase for today's content
-      setLoadingMsg("Checking today's briefing...")
-      let content = await loadTodayContent()
-
-      if (content?.article_json && content?.case_json) {
-        // Found in Supabase — cache locally and show
-        const cj = content.case_json
-        const parsed = { article: content.article_json, case: cj, ledger: cj?._ledger || null, turnaround: cj?._turnaround || null }
-        setCachedContent(parsed)
-        setTodayContent(parsed)
-        setScreen('home')
-        return
-      }
-
-      // 4. Nothing cached — generate fresh
-      const conceptsSeen = prog?.concepts_seen || []
-      const casesDone = prog?.cases_done || []
-      const concept = pickConcept(conceptsSeen)
-      const lessonIdx = prog?.accounting_lesson || 0
-      setLoadingMsg(`Writing: ${concept.split(' ').slice(0, 4).join(' ')}...`)
-
-      // Generate with one retry each — these calls occasionally return malformed JSON
-      async function withRetry(fn) {
-        let r = await fn()
-        if (!r) r = await fn()
-        return r
-      }
-      const turnaroundsDone = prog?.turnarounds_done || []
-      const [article, caseData, ledger, turnaround] = await Promise.all([
-        withRetry(() => generateArticle(concept, conceptsSeen)),
-        withRetry(() => generateCase(conceptsSeen, casesDone)),
-        withRetry(() => generateAccountingArticle(lessonIdx)),
-        withRetry(() => generateTurnaroundCase(turnaroundsDone))
-      ])
-
-      if (!article || !caseData) throw new Error('Content generation failed — tap Try again')
-
-      const parsed = { article, case: caseData, ledger, turnaround }
-      setCachedContent(parsed)
-      setTodayContent(parsed)
-
-      // Record today's concept as seen IMMEDIATELY (prevents repeats even if not marked read)
-      if (article?.concept && !conceptsSeen.includes(article.concept)) {
-        saveProgress({ concepts_seen: [...conceptsSeen, article.concept] })
-          .then(p => { if (p) { setProgress(p); setCachedProgress(p) } })
-          .catch(console.error)
-      }
-
-      // Save to Supabase (don't await — let it happen in background)
-      saveTodayContent({ article_json: article, case_json: { ...caseData, _ledger: ledger, _turnaround: turnaround } }).catch(console.error)
-
+      setLoadingMsg("Opening today's briefing...")
+      // Slow path only happens the very first time (or if the weekly batch isn't ready yet)
+      const slow = setTimeout(() => setLoadingMsg('Writing a fresh briefing, this takes about a minute...'), 4000)
+      const { bundle } = await fetchToday().finally(() => clearTimeout(slow))
+      setCachedContent(bundle)
+      setTodayContent(bundle)
       setScreen('home')
+
+      // Top up the weekly queue in the background
+      maintainQueue()
     } catch (err) {
       console.error('Init error:', err)
       setError(err.message)
     }
   }
 
+  async function update(updates) {
+    const updated = await saveProgress(updates)
+    setProgress(updated)
+    setCachedProgress(updated)
+  }
+
   async function handleArticleComplete() {
-    const updated = await saveProgress({
+    await update({
       article_read_today: true,
       xp: (progress?.xp || 0) + 20,
-      concepts_seen: [...(progress?.concepts_seen || []), todayContent?.article?.concept].filter(Boolean),
+      concepts_seen: [...new Set([...(progress?.concepts_seen || []), todayContent?.article?.concept].filter(Boolean))],
     })
-    setProgress(updated)
-    setCachedProgress(updated)
   }
 
-  async function handleLedgerComplete() {
-    const updated = await saveProgress({
-      ledger_read_today: true,
-      xp: (progress?.xp || 0) + 20,
-      accounting_lesson: (progress?.accounting_lesson || 0) + 1,
-    })
-    setProgress(updated)
-    setCachedProgress(updated)
-  }
-
-  async function handleTurnaroundDecide(decision, wasCorrect) {
-    const xpGain = wasCorrect ? 30 : 15
-    const updated = await saveProgress({
-      turnaround_done_today: true,
-      xp: (progress?.xp || 0) + xpGain,
-      turnarounds_done: [...(progress?.turnarounds_done || []), todayContent?.turnaround?.id].filter(Boolean),
-    })
-    setProgress(updated)
-    setCachedProgress(updated)
-    if (todayContent?.turnaround?.id) await saveDecision(todayContent.turnaround.id, decision, wasCorrect)
-  }
-
-  async function handleCaseDecide(decision, wasCorrect) {
-    const xpGain = wasCorrect ? 30 : 15
-    const updated = await saveProgress({
+  async function handleCaseDecide(decision, wasCorrect, reasoning) {
+    await update({
       case_done_today: true,
-      xp: (progress?.xp || 0) + xpGain,
+      xp: (progress?.xp || 0) + (wasCorrect ? 30 : 15) + (reasoning ? 5 : 0),
       cases_done: [...(progress?.cases_done || []), todayContent?.case?.id].filter(Boolean),
     })
-    setProgress(updated)
-    setCachedProgress(updated)
-    if (todayContent?.case?.id) await saveDecision(todayContent.case.id, decision, wasCorrect)
+    if (todayContent?.case?.id) await saveDecision(todayContent.case.id, decision, wasCorrect, reasoning, 'case')
+  }
+
+  async function handleTurnaroundDecide(decision, wasCorrect, reasoning) {
+    await update({
+      turnaround_done_today: true,
+      xp: (progress?.xp || 0) + (wasCorrect ? 30 : 15) + (reasoning ? 5 : 0),
+      turnarounds_done: [...(progress?.turnarounds_done || []), todayContent?.turnaround?.id].filter(Boolean),
+    })
+    if (todayContent?.turnaround?.id) await saveDecision(todayContent.turnaround.id, decision, wasCorrect, reasoning, 'turnaround')
   }
 
   if (error) {
@@ -185,6 +115,12 @@ export default function App() {
 
   if (screen === 'loading') return <LoadingScreen message={loadingMsg} />
 
+  const navBtn = (key, icon, label, onClick) => (
+    <button key={key} style={{ flex:1, background:'none', border:'none', color: key === 'home' ? '#c5f135' : '#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:10, padding:'10px 2px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={onClick}>
+      <span style={{fontSize:16}}>{icon}</span><span>{label}</span>
+    </button>
+  )
+
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'#0c0d0b', maxWidth:540, margin:'0 auto' }}>
       <header style={{ flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px 12px', borderBottom:'1px solid #252820', background:'linear-gradient(180deg,#141510 0%,transparent 100%)' }}>
@@ -199,30 +135,18 @@ export default function App() {
       </header>
 
       <div style={{ flex:1, overflow:'hidden' }}>
-        {screen === 'home' && <HomeScreen progress={progress} todayContent={todayContent} onOpenArticle={() => setScreen('article')} onOpenCase={() => setScreen('case')} onOpenLedger={() => setScreen('ledger')} onOpenTurnaround={() => setScreen('turnaround')} />}
+        {screen === 'home' && <HomeScreen progress={progress} todayContent={todayContent} onOpenArticle={() => setScreen('article')} onOpenCase={() => setScreen('case')} onOpenTurnaround={() => setScreen('turnaround')} />}
         {screen === 'article' && todayContent?.article && <ArticleView article={todayContent.article} onComplete={handleArticleComplete} completed={progress?.article_read_today} />}
-        {screen === 'ledger' && todayContent?.ledger && <ArticleView article={todayContent.ledger} onComplete={handleLedgerComplete} completed={progress?.ledger_read_today} />}
-        {screen === 'case' && todayContent?.case && <CaseView caseData={todayContent.case} onDecide={handleCaseDecide} userDecision={progress?.case_done_today ? 'done' : null} completed={progress?.case_done_today} />}
-        {screen === 'turnaround' && todayContent?.turnaround && <CaseView caseData={todayContent.turnaround} onDecide={handleTurnaroundDecide} userDecision={progress?.turnaround_done_today ? 'done' : null} completed={progress?.turnaround_done_today} />}
+        {screen === 'case' && todayContent?.case && <CaseView key="case" caseData={todayContent.case} onDecide={handleCaseDecide} completed={progress?.case_done_today} />}
+        {screen === 'turnaround' && todayContent?.turnaround && <CaseView key="turn" caseData={todayContent.turnaround} onDecide={handleTurnaroundDecide} completed={progress?.turnaround_done_today} />}
       </div>
 
       {screen === 'home' && (
         <nav style={{ flexShrink:0, display:'flex', background:'#141510', borderTop:'1px solid #252820', paddingBottom:'env(safe-area-inset-bottom)' }}>
-          <button style={{ flex:1, background:'none', border:'none', color:'#c5f135', fontFamily:'DM Mono,monospace', fontSize:10, padding:'10px 2px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }}>
-            <span style={{fontSize:16}}>◆</span><span>Today</span>
-          </button>
-          <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:10, padding:'10px 2px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('article')}>
-            <span style={{fontSize:16}}>▦</span><span>Article</span>
-          </button>
-          <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:10, padding:'10px 2px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('ledger')}>
-            <span style={{fontSize:16}}>▤</span><span>Ledger</span>
-          </button>
-          <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:10, padding:'10px 2px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('case')}>
-            <span style={{fontSize:16}}>❖</span><span>Case</span>
-          </button>
-          <button style={{ flex:1, background:'none', border:'none', color:'#7a7d6e', fontFamily:'DM Mono,monospace', fontSize:10, padding:'10px 2px', display:'flex', flexDirection:'column', alignItems:'center', gap:4, cursor:'pointer' }} onClick={() => setScreen('turnaround')}>
-            <span style={{fontSize:16}}>⟳</span><span>Turnaround</span>
-          </button>
+          {navBtn('home', '◆', 'Today', () => {})}
+          {navBtn('article', '▦', 'Article', () => setScreen('article'))}
+          {navBtn('case', '❖', 'Case', () => setScreen('case'))}
+          {navBtn('turnaround', '⟳', 'Turnaround', () => setScreen('turnaround'))}
         </nav>
       )}
     </div>

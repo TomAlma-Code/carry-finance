@@ -1,5 +1,8 @@
 {
   "outputDirectory": "dist",
+  "functions": {
+    "api/content.js": { "maxDuration": 300 }
+  },
   "routes": [
     { "handle": "filesystem" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
