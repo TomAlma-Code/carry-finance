@@ -40,7 +40,7 @@ export const CONCEPTS = [
   'Impact multiples of money (IMM) as a returns framework',
 ]
 
-const JSON_RULE = 'Always respond with valid JSON only. No markdown fences, no preamble.'
+const JSON_RULE = 'Always respond with valid JSON only. No markdown fences, no preamble. The options are shuffled after you write them, so never refer to an option by number or letter anywhere; refer to it by its label.'
 
 // Shared option format: an array of 4 options plus the index of the best one.
 // The server shuffles them into A-D afterwards, so the model never has to "hide" the answer.

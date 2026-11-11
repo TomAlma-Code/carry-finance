@@ -16,7 +16,7 @@ const SUPA_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_A
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4anNybnp1b3B2bmdpam5tZm9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjEyMDIsImV4cCI6MjA5NjM5NzIwMn0.f_pCJp3EQmstRJcEXkcnP1czDh35aKpkjruq6oAY9fI'
 const db = createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession: false } })
 
-let WEEK = Number(process.env.CARRY_WEEK) || 7  // bundles per batch
+const WEEK = 7          // bundles per batch
 const REFILL_BELOW = 3  // start a new batch when fewer than this many bundles are waiting
 const API = 'https://api.anthropic.com/v1'
 
@@ -262,11 +262,7 @@ async function feedback(userId, caseData, choice, reasoning) {
 // ---------------------------------------------------------------------------
 
 export default async function handler(req, res) {
-  // TEMP: preview-only self test via GET (removed before merge)
-  if (req.method === 'GET' && process.env.VERCEL_ENV === 'preview' && req.query?.selftest) {
-    req.body = { action: req.query.action, userId: 'selftest_tmp', date: req.query.date || '2026-11-11' }
-    if (req.query.week) WEEK = Number(req.query.week)
-  } else if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   let body = req.body
   if (typeof body === 'string') { try { body = JSON.parse(body) } catch { body = {} } }
   const { action, userId, date } = body || {}
