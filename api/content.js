@@ -54,7 +54,9 @@ function textOf(message) {
 }
 
 async function callNow(req) {
-  return textOf(await anthropic('/messages', { method: 'POST', body: params(req) }))
+  const msg = await anthropic('/messages', { method: 'POST', body: params(req) })
+  if (msg.stop_reason !== 'end_turn') console.error(`[carry] stop_reason=${msg.stop_reason} usage=${JSON.stringify(msg.usage)} blocks=${(msg.content||[]).map(b=>b.type).join(',')}`)
+  return textOf(msg)
 }
 
 // ---------------------------------------------------------------------------
