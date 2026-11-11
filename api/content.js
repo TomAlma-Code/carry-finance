@@ -245,7 +245,10 @@ async function feedback(userId, caseData, choice, reasoning) {
 // ---------------------------------------------------------------------------
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  // TEMP: preview-only self test via GET (removed before merge)
+  if (req.method === 'GET' && process.env.VERCEL_ENV === 'preview' && req.query?.selftest) {
+    req.body = { action: req.query.action, userId: 'selftest_tmp', date: req.query.date || '2026-11-11' }
+  } else if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   let body = req.body
   if (typeof body === 'string') { try { body = JSON.parse(body) } catch { body = {} } }
   const { action, userId, date } = body || {}
