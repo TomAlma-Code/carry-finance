@@ -16,7 +16,7 @@ const SUPA_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_A
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4anNybnp1b3B2bmdpam5tZm9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjEyMDIsImV4cCI6MjA5NjM5NzIwMn0.f_pCJp3EQmstRJcEXkcnP1czDh35aKpkjruq6oAY9fI'
 const db = createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession: false } })
 
-const WEEK = Number(process.env.CARRY_WEEK) || 7  // bundles per batch
+let WEEK = Number(process.env.CARRY_WEEK) || 7  // bundles per batch
 const REFILL_BELOW = 3  // start a new batch when fewer than this many bundles are waiting
 const API = 'https://api.anthropic.com/v1'
 
@@ -102,14 +102,19 @@ function requestsFor(plan, titles) {
   }
 }
 
+function logFail(what, raw, out) {
+  if (!out) console.error(`[carry] ${what} failed to parse. Length ${raw?.length || 0}. Tail: ${String(raw || '').slice(-400)}`)
+  return out
+}
+
 function buildBundle(plan, raw) {
-  const article = parseJsonLoose(raw.article)
+  const article = logFail('article', raw.article, parseJsonLoose(raw.article))
   if (article && plan.concept) article.concept = plan.concept
-  const kase = normaliseCase(parseJsonLoose(raw.case), { kind: 'scenario' })
+  const kase = logFail('case', raw.case, normaliseCase(parseJsonLoose(raw.case), { kind: 'scenario' }))
   const entry = plan.turnaroundKey ? getLibraryCase(plan.turnaroundKey) : null
-  const turn = normaliseCase(parseJsonLoose(raw.turn), entry
+  const turn = logFail('turnaround', raw.turn, normaliseCase(parseJsonLoose(raw.turn), entry
     ? { kind: 'real', country: entry.country, sources: entry.sources, id: `real-${entry.key}` }
-    : { kind: 'scenario' })
+    : { kind: 'scenario' }))
   return { article, kase, turn, entry }
 }
 
@@ -208,6 +213,8 @@ async function generateOneNow(userId, date) {
   const retry = async (req) => { try { return await callNow(req) } catch (e) { if (/credits/.test(e.message)) throw e; return callNow(req) } }
   const [a, c, t] = await Promise.all([retry(r.article), retry(r.case), retry(r.turn)])
   const b = buildBundle(plan, { article: a, case: c, turn: t })
+  if (!b.kase) b.kase = normaliseCase(parseJsonLoose(await callNow(r.case).catch(() => '')), { kind: 'scenario' })
+  if (!b.turn) b.turn = buildBundle(plan, { turn: await callNow(r.turn).catch(() => '') }).turn
   if (!b.article || (!b.kase && !b.turn)) throw new Error('Content generation failed. Tap Try again.')
   const { error } = await db.from('content_queue').insert(queueRow(userId, plan, b, { status: 'released', released_on: date }))
   if (error) { const existing = await releasedFor(userId, date); if (existing) return existing; throw new Error(error.message) }
@@ -248,6 +255,7 @@ export default async function handler(req, res) {
   // TEMP: preview-only self test via GET (removed before merge)
   if (req.method === 'GET' && process.env.VERCEL_ENV === 'preview' && req.query?.selftest) {
     req.body = { action: req.query.action, userId: 'selftest_tmp', date: req.query.date || '2026-11-11' }
+    if (req.query.week) WEEK = Number(req.query.week)
   } else if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   let body = req.body
   if (typeof body === 'string') { try { body = JSON.parse(body) } catch { body = {} } }

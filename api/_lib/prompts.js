@@ -80,7 +80,7 @@ Return JSON with this exact shape:
   "body": "the full article, 600-900 words, paragraphs separated by \\n\\n, no bullet points",
   "keyTakeaway": "one crisp sentence"
 }`
-  return { system, prompt, maxTokens: 5000 }
+  return { system, prompt, maxTokens: 8000 }
 }
 
 // ---- INVESTMENT CASE (realistic scenario) -----------------------------------
@@ -130,7 +130,7 @@ Return JSON with this EXACT shape:
   "lessonTitle": "The transferable principle (short)",
   "lesson": "1-2 sentences connecting to a reusable investing principle."
 }`
-  return { system, prompt, maxTokens: 5000 }
+  return { system, prompt, maxTokens: 8000 }
 }
 
 // ---- TURNAROUND: REAL CASE FROM LIBRARY --------------------------------------
@@ -186,7 +186,7 @@ Write the case. Return JSON with this EXACT shape:
   "lesson": "1-2 sentences on the reusable turnaround principle."
 }
 The exhibit should have 4-6 rows taken from the facts.`
-  return { system, prompt, maxTokens: 5000 }
+  return { system, prompt, maxTokens: 8000 }
 }
 
 // ---- TURNAROUND: FICTIONAL SME FALLBACK ----------------------------------------
@@ -234,7 +234,7 @@ Return JSON with this EXACT shape:
   "lessonTitle": "The transferable operating principle (short)",
   "lesson": "1-2 sentences."
 }`
-  return { system, prompt, maxTokens: 5000 }
+  return { system, prompt, maxTokens: 8000 }
 }
 
 // ---- FEEDBACK ON THE USER'S REASONING ----------------------------------------
@@ -259,13 +259,21 @@ Give feedback in 3 parts, plain text:
 // ---- PARSING & NORMALISING -----------------------------------------------------
 export function parseJsonLoose(raw) {
   if (!raw) return null
-  let c = raw.replace(/```json|```/g, '').trim()
-  const s = c.indexOf('{')
-  if (s < 0) return null
-  c = c.slice(s)
-  const e = c.lastIndexOf('}')
-  if (e > 0) { try { return JSON.parse(c.slice(0, e + 1)) } catch {} }
-  return null
+  const c = raw.replace(/```json|```/g, '').trim()
+  const start = c.indexOf('{')
+  if (start < 0) return null
+  // Walk to the matching closing brace, ignoring braces inside strings
+  let depth = 0, inStr = false, esc = false
+  for (let i = start; i < c.length; i++) {
+    const ch = c[i]
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue }
+    if (ch === '"') inStr = true
+    else if (ch === '{') depth++
+    else if (ch === '}' && --depth === 0) {
+      try { return JSON.parse(c.slice(start, i + 1)) } catch { break }
+    }
+  }
+  try { return JSON.parse(c.slice(start, c.lastIndexOf('}') + 1)) } catch { return null }
 }
 
 function shuffle(arr) {
@@ -279,7 +287,14 @@ function shuffle(arr) {
 
 // Turn the model's options array into the A-D object the app uses, in random order.
 export function normaliseCase(parsed, extra = {}) {
-  if (!parsed || !Array.isArray(parsed.options) || parsed.options.length !== 4) return null
+  if (!parsed) return null
+  if (parsed.options && !Array.isArray(parsed.options) && typeof parsed.options === 'object') {
+    // Model used {A:..,B:..} instead of an array: convert, and map a letter bestIndex
+    const keys = Object.keys(parsed.options)
+    parsed.options = keys.map(k => parsed.options[k])
+    for (const f of ['bestIndex', 'realIndex']) if (typeof parsed[f] === 'string' && keys.includes(parsed[f])) parsed[f] = keys.indexOf(parsed[f])
+  }
+  if (!Array.isArray(parsed.options) || parsed.options.length !== 4) return null
   const best = Number(parsed.bestIndex)
   if (!(best >= 0 && best <= 3)) return null
   const real = parsed.realIndex === undefined || parsed.realIndex === null ? null : Number(parsed.realIndex)
