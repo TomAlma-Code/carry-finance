@@ -32,7 +32,7 @@ export async function loadProgress() {
 // Save/update progress
 export async function saveProgress(updates) {
   const userId = getUserId()
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA')
 
   const { data: existing } = await supabase
     .from('progress')
@@ -65,40 +65,15 @@ export async function saveProgress(updates) {
 }
 
 // Save a completed case decision
-export async function saveDecision(caseId, decision, wasCorrect) {
+export async function saveDecision(caseId, decision, wasCorrect, reasoning = null, kind = null) {
   const userId = getUserId()
   await supabase.from('decisions').insert({
     user_id: userId,
     case_id: caseId,
     decision,
     was_correct: wasCorrect,
+    reasoning: reasoning || null,
+    kind,
     decided_at: new Date().toISOString()
   })
-}
-
-// Load today's content (article + case) - cache in supabase to avoid regenerating
-export async function loadTodayContent() {
-  const today = new Date().toISOString().split('T')[0]
-  const userId = getUserId()
-
-  const { data } = await supabase
-    .from('daily_content')
-    .select('*')
-    .eq('date', today)
-    .eq('user_id', userId)
-    .single()
-
-  return data
-}
-
-export async function saveTodayContent(content) {
-  const today = new Date().toISOString().split('T')[0]
-  const userId = getUserId()
-
-  await supabase.from('daily_content').upsert({
-    date: today,
-    user_id: userId,
-    ...content,
-    created_at: new Date().toISOString()
-  }, { onConflict: 'date,user_id' })
 }

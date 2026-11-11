@@ -1,9 +1,9 @@
 import React from 'react'
+import { TOTAL_CONCEPTS } from './api'
 
-export default function HomeScreen({ progress, todayContent, onOpenArticle, onOpenCase, onOpenLedger, onOpenTurnaround }) {
+export default function HomeScreen({ progress, todayContent, onOpenArticle, onOpenCase, onOpenTurnaround }) {
   const articleDone = progress?.article_read_today
   const caseDone = progress?.case_done_today
-  const ledgerDone = progress?.ledger_read_today
   const turnaroundDone = progress?.turnaround_done_today
   const streak = progress?.streak || 1
   const xp = progress?.xp || 0
@@ -70,28 +70,6 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
           <div style={styles.cardArrow}>→</div>
         </div>
 
-        {/* Ledger (accounting curriculum) card */}
-        <div
-          style={{ ...styles.card, borderLeft: '3px solid #88b4d4', opacity: ledgerDone ? 0.7 : 1 }}
-          onClick={onOpenLedger}
-        >
-          <div style={styles.cardTop}>
-            <span style={{ ...styles.cardType, color: '#88b4d4' }}>THE LEDGER</span>
-            {ledgerDone && <span style={styles.doneBadge}>✓ Read</span>}
-          </div>
-          {todayContent?.ledger ? (
-            <>
-              <div style={{ ...styles.cardTag, color: '#88b4d4' }}>{todayContent.ledger.tag}</div>
-              <h2 style={styles.cardTitle}>{todayContent.ledger.title}</h2>
-              <p style={styles.cardHook}>{todayContent.ledger.hook}</p>
-              <div style={styles.cardMeta}>{todayContent.ledger.readTime} read · +20 XP · builds on previous lessons</div>
-            </>
-          ) : (
-            <div style={styles.cardPlaceholder}>Loading lesson…</div>
-          )}
-          <div style={{ ...styles.cardArrow, color: '#88b4d4' }}>→</div>
-        </div>
-
         {/* Case card */}
         <div
           style={{ ...styles.card, ...styles.caseCard, opacity: caseDone ? 0.7 : 1 }}
@@ -106,7 +84,7 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
               <div style={{ ...styles.cardTag, color: '#f2a93b' }}>{todayContent.case.domain}</div>
               <h2 style={styles.cardTitle}>{todayContent.case.company} · {todayContent.case.year}</h2>
               <p style={styles.cardHook}>{todayContent.case.title}</p>
-              <div style={styles.cardMeta}>Real decision · +30 XP if right</div>
+              <div style={styles.cardMeta}>{todayContent.case.asOf || todayContent.case.year} · realistic scenario · +30 XP if right</div>
             </>
           ) : (
             <div style={styles.cardPlaceholder}>Loading case…</div>
@@ -128,7 +106,7 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
               <div style={{ ...styles.cardTag, color: '#d98f4b' }}>{todayContent.turnaround.domain}</div>
               <h2 style={styles.cardTitle}>{todayContent.turnaround.company} · {todayContent.turnaround.year}</h2>
               <p style={styles.cardHook}>{todayContent.turnaround.title}</p>
-              <div style={styles.cardMeta}>Operating decision · +30 XP if right</div>
+              <div style={styles.cardMeta}>{todayContent.turnaround.kind === 'real' ? `Real case · ${todayContent.turnaround.country || ''}` : 'Realistic scenario'} · +30 XP if right</div>
             </>
           ) : (
             <div style={styles.cardPlaceholder}>Loading case…</div>
@@ -156,7 +134,7 @@ export default function HomeScreen({ progress, todayContent, onOpenArticle, onOp
               {progress?.concepts_seen?.length || 0}
             </span>
             <span style={{ color: '#7a7d6e', fontSize: 14, marginLeft: 8 }}>
-              of 32 topics
+              of {TOTAL_CONCEPTS} topics
             </span>
           </p>
         </div>
